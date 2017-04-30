@@ -12,7 +12,13 @@ Adafruit_GPS GPS(&ss);
 boolean usingInterrupt = false;
 void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 
-void setup() {    
+void setup() {
+  Serial.begin(9600);
+  rightLED.begin(0x70); // Don't solder any I2C jumpers on rightLED
+  // https://learn.adafruit.com/adafruit-led-backpack/0-54-alphanumeric?view=all#changing-i2c-address
+  midLED.begin(0x71);// TODO: Solder A0 on midLED
+  leftLED.begin(0x72);// TODO: Solder A1 on leftLED
+  
   // connect at 115200 so we can read the GPS fast enuf and
   // also spit it out
   Serial.begin(115200);
@@ -51,8 +57,6 @@ void setup() {
   // every 1 millisecond, and read data from the GPS for you. that makes the
   // loop code a heck of a lot easier!
   useInterrupt(true);
-  
-  delay(1000);
 }
 
 // Interrupt is called once a millisecond, looks for any new GPS data, and stores it
@@ -81,29 +85,21 @@ void useInterrupt(boolean v) {
   }
 }
 
-
-void loop()                     // run over and over again
-{
+void loop() {
   if (GPS.newNMEAreceived()) {
     GPS.parse(GPS.lastNMEA());
-    
-    Serial.println(
-      String(GPS.year) + " " +
-      String(GPS.month) + " " +
-      String(GPS.day) + " " +
-      String(GPS.hour) + " " +
-      String(GPS.minute) + " " +
-      String(GPS.seconds));
 
-    Serial.println(toUnix(
+    long t = toUnix(
       GPS.year,
       GPS.month,
       GPS.day,
       GPS.hour,
       GPS.minute,
-      GPS.seconds));
+      GPS.seconds);
+    Serial.println(t);
+
+    display(t);
   }
-   // do nothing! all reading and printing is done in the interrupt
 }
 
 // Start counting seconds at the beginning of 2017, since we
@@ -142,4 +138,43 @@ long toUnix(uint8_t year,
          + long(hour * 60 * 60)
          + long(minute * 60)
          + long(second);
+}
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include "Adafruit_LEDBackpack.h"
+
+Adafruit_AlphaNum4 rightLED = Adafruit_AlphaNum4(); // rightmost 4 digits
+Adafruit_AlphaNum4 midLED = Adafruit_AlphaNum4();   // middle 4 digits
+Adafruit_AlphaNum4 leftLED = Adafruit_AlphaNum4();  // leftmost 2 digits
+
+// display displays the number across 3 LED backpacks.
+void display(long num) {
+  long right = num % 10000;
+  long mid = num / 10000 % 10000;
+  long left = num / 10000 / 10000;
+
+  String rstr = String(right);
+  rightLED.writeDigitAscii(0, rstr[0]);
+  rightLED.writeDigitAscii(1, rstr[1]);
+  rightLED.writeDigitAscii(2, rstr[2]);
+  rightLED.writeDigitAscii(3, rstr[3]);
+  rightLED.writeDisplay();
+
+  String mstr = String(mid);
+  midLED.writeDigitAscii(0, mstr[0]);
+  midLED.writeDigitAscii(1, mstr[1]);
+  midLED.writeDigitAscii(2, mstr[2]);
+  midLED.writeDigitAscii(3, mstr[3]);
+  midLED.writeDisplay();
+
+  String lstr = String(left);
+  leftLED.writeDigitAscii(0, lstr[0]);
+  leftLED.writeDigitAscii(1, lstr[1]);
+  // TODO: Fix this before late 2286.
+  leftLED.writeDigitRaw(2, 0x0); // nothing.
+  leftLED.writeDigitRaw(3, 0x0); // nothing.
+  leftLED.writeDisplay();
+
+  delay(200);
 }
